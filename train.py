@@ -2,12 +2,25 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import tensorflow as tf
+import argparse
 
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.models import Sequential
 
 import pathlib
+
+# Parse arguments
+parser = argparse.ArgumentParser(description="Training CLI",
+                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument("-it", "--iterations", help="number of training iterations")
+args = parser.parse_args()
+config = vars(args)
+
+epochs=10
+if(config['iterations'] is not None):
+  epochs = int(config['iterations'])
+
 
 # Current Directory
 dirname = os.path.dirname(__file__)
@@ -17,6 +30,8 @@ data_path = pathlib.Path(os.path.join(dirname, 'data'))
 model_path = pathlib.Path(os.path.join(dirname, 'model'))
 # The Names to classify by
 class_names = os.listdir(data_path)
+# Logs Directory
+logdir = pathlib.Path(os.path.join(dirname, 'logs'))
 
 #Training Configuration
 batch_size = 32
@@ -27,16 +42,18 @@ def create_model():
   num_classes = len(class_names)
 
   # Data Augmentation to prevent overfitting
-  data_augmentation = keras.Sequential(
-  [
+  data_augmentation = keras.Sequential([
     layers.RandomFlip("horizontal",
                     input_shape=(img_height,
                                 img_width,
                                 3)),
+    layers.RandomFlip("vertical",
+                input_shape=(img_height,
+                            img_width,
+                            3)),
     layers.RandomRotation(0.1),
     layers.RandomZoom(0.1),
-  ]
-  )
+  ])
 
   # Dropout to reduce overfitting
   model = Sequential([
@@ -123,6 +140,7 @@ val_ds = val_ds.cache().prefetch(buffer_size=AUTOTUNE)
 # Normalize
 normalization_layer = layers.Rescaling(1./255)
 
+
 normalized_ds = train_ds.map(lambda x, y: (normalization_layer(x), y))
 image_batch, labels_batch = next(iter(normalized_ds))
 first_image = image_batch[0]
@@ -132,13 +150,13 @@ model = get_model()
 model.summary()
 
 #Training
-epochs=2
 history = model.fit(
   train_ds,
   validation_data=val_ds,
-  epochs=epochs
+  epochs=epochs,
+  callbacks=[tf.keras.callbacks.CSVLogger(logdir / "history.csv", append=True)],
 )
 
-model.save(model_path)
+model.save(model_path, save_format='tf')
 
 show_plot(history)
